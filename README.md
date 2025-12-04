@@ -31,6 +31,46 @@ docker run --rm -it \
   -p 5556:5556 \
   golexfootball/python-yolo:latest
  ```
+The worker will:
+
+Listen on tcp://0.0.0.0:5555 (host: 127.0.0.1:5555) for raw frames
+
+Push results to tcp://0.0.0.0:5556 (host: 127.0.0.1:5556)
+
+The models are already inside the image, so no extra downloads are needed.
+
+```
+That’s it: they only need Docker + GPU drivers.
+
+---
+
+## 4️⃣ If someone really needs the raw `.pt` files
+
+If a dev wants to play with the models **outside Docker** (e.g. for debugging):
+
+### Option A – You send them directly
+
+- Zip `models/` → send via Google Drive / WeTransfer / etc.
+- They unzip to `models/` in their cloned repo.
+
+### Option B – Expose them from the container (optional trick)
+
+They could:
+
+```bash
+docker run --rm -it \
+  --gpus all \
+  -v %cd%/exported_models:/exported_models \
+  golexfootball/python-yolo:latest bash
+```
+Then inside the container (interactive shell):
+```
+cp /workspace/models/*.pt /exported_models/
+```
+Now the .pt files are on their host in exported_models/.
+
+(That’s more advanced; Option A is simpler.)
+
 ---
 
 ## 1. Requirements
