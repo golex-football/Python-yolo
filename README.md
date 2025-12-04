@@ -19,7 +19,7 @@ All of this is wrapped in a **Docker image** so it’s easy to run on any machin
 2. Pull the prebuilt image:
 
    ```bash
-   docker pull golexfootball/python-yolo:latest
+   docker pull sinaabv80/python-yolo:latest
 
 ---
 
