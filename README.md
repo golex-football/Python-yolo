@@ -13,6 +13,14 @@ This repo contains a GPU-accelerated YOLOv8 segmentation worker that:
 
 All of this is wrapped in a **Docker image** so it’s easy to run on any machine with a GPU.
 
+## Quick start (Docker only, no Python setup)
+
+1. Install **Docker** (and NVIDIA driver + container toolkit if on Linux).
+2. Pull the prebuilt image:
+
+   ```bash
+   docker pull golexfootball/python-yolo:latest
+
 ---
 
 ## 1. Requirements
