@@ -1,22 +1,16 @@
-# Python cache
+# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# Virtual env
+# Local env
 .venv/
 
-# Local helper files
-full_project_structure.txt
-project_structure.txt
+# Local outputs
+_vid/
+_bt/
+tmp/
+*.sock
 
-# Don't commit big model weights
-models/*.pt
-*.pt
-
-# Optional junk
-*.log
-*.mp4
-*.mov
-*.avi
+# OS
+.DS_Store
+Thumbs.db
