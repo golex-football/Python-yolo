@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local temp / debug stuff
+full_project_structure.txt
+project_structure.txt
+*.log
+
+# Git metadata
+.git/
+.gitignore
+
+# Big media files if you ever drop them here
+*.mp4
+*.mov
+*.avi

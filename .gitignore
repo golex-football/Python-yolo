@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 .venv/
 __pycache__/
 *.pyc
@@ -5,3 +6,27 @@ __pycache__/
 /videos/
 tmp/
 .DS_Store
+=======
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+
+# Local helper files
+full_project_structure.txt
+project_structure.txt
+
+# Don't commit big model weights
+models/*.pt
+*.pt
+
+# Optional junk
+*.log
+*.mp4
+*.mov
+*.avi
+>>>>>>> origin/main
