@@ -234,36 +234,3 @@ export MOONALT_BROADTRACK_OUT="ipc:///tmp/broadtrack_in.sock"
 python -u -m app.viewer
 ```
 
-## Push to GitHub (safe flow)
-
-```bash
-ZIP_DIR="/path/to/unzipped"   # this folder
-REPO_URL="https://github.com/golex-football/Python-yolo.git"
-
-cd "$ZIP_DIR"
-git init
-git checkout -b zip-import
-git add -A
-git commit -m "Import ZIP snapshot (manual)"
-git remote add origin "$REPO_URL"
-git push -u origin zip-import
-
-# When ready to replace main:
-git fetch origin
-git push --force-with-lease origin zip-import:main
-```
-
-## Notes
-
-* Set `MOONALT_YOLO_HALF=0` if you hit any FP16/half fuse errors.
-* Boxes are **XYXY in source coordinates**; mask is **GRAY8 @ source size**.
-* `pixel_format` for input must be **BGR24**.
-
-## License
-
-TBD by repo owner.
-
-```
-
-If you want, I can drop these files into your tree as `README.md` (repo root) and `<zip>/README.md` text.
-```
