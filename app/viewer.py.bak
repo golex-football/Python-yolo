@@ -1,0 +1,46 @@
+import os, zmq, numpy as np, cv2
+from pathlib import Path
+from services.connection.bt_packet_pb2 import BtPacket
+
+OUT_EP = os.environ.get("MOONALT_BROADTRACK_OUT", "/tmp/broadtrack_in.sock")
+OUTDIR = Path("/tmp/moonalt-viewer")
+OUTDIR.mkdir(parents=True, exist_ok=True)
+
+def main():
+    ctx = zmq.Context.instance()
+    s = ctx.socket(zmq.PULL)
+    endpoint = OUT_EP if OUT_EP.startswith("ipc://") else f"ipc://{OUT_EP}"
+    s.connect(endpoint)
+    print(f"[viewer] CONNECTED -> {endpoint}")
+    print(f"[viewer] writing frames to: {OUTDIR}")
+
+    while True:
+        data = s.recv()
+        pkt = BtPacket()
+        pkt.ParseFromString(data)
+
+        w, h = pkt.width, pkt.height
+        frame = np.frombuffer(pkt.frame_data, dtype=np.uint8).reshape((h, w, 3))
+        mask  = np.frombuffer(pkt.mask_data,  dtype=np.uint8).reshape((h, w))
+
+        # draw boxes on a copy to visualize
+        vis = frame.copy()
+        for b in pkt.boxes:
+            p1 = (int(b.x1), int(b.y1))
+            p2 = (int(b.x2), int(b.y2))
+            cv2.rectangle(vis, p1, p2, (0,255,0), 2)
+
+        both = np.hstack([vis, cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)])
+
+        # log boxes (so you SEE the list)
+        if pkt.frame_id % 10 == 0:
+            boxes_log = ", ".join(f"({int(b.x1)},{int(b.y1)}-{int(b.x2)},{int(b.y2)})" for b in pkt.boxes)
+            print(f"[viewer] frame_id={pkt.frame_id} boxes=[{boxes_log}]")
+
+        # write images every 10 frames to avoid disk spam
+        if pkt.frame_id % 10 == 0:
+            out_path = OUTDIR / f"fid_{pkt.frame_id:06d}.jpg"
+            cv2.imwrite(str(out_path), both)
+
+if __name__ == "__main__":
+    main()
