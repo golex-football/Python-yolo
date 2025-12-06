@@ -1,0 +1,31 @@
+syntax = "proto3";
+package moonalt;
+
+message InputFrame {
+  string schema       = 1;   // "moonalt.yolo_input_v1"
+  int64  frame_id     = 2;
+  double timestamp    = 3;   // seconds
+  int32  width        = 4;   // px
+  int32  height       = 5;   // px
+  string pixel_format = 6;   // "BGR24"
+  bytes  frame_data   = 7;   // HxWx3, row-major
+}
+
+message OutputFrame {
+  string schema       = 1;   // "moonalt.yolo_output_v1"
+  int64  frame_id     = 2;
+  int32  width        = 3;
+  int32  height       = 4;
+  string pixel_format = 5;   // "BGR24"
+  string mask_format  = 6;   // "GRAY8"
+  repeated BoundingBox boxes = 7;
+  bytes  frame_data   = 8;   // original BGR24 frame
+  bytes  mask_data    = 9;   // HxW GRAY8
+}
+
+message BoundingBox {
+  float x1 = 1;
+  float y1 = 2;
+  float x2 = 3;
+  float y2 = 4;
+}
