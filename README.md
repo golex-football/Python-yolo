@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/23997810/README.md)
 
 # ✅ **README.md (Final — For Your ZIP Exactly As It Is)**
 

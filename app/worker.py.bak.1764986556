@@ -1,0 +1,222 @@
+# app/worker.py
+import os
+import time
+import numpy as np
+import cv2
+import zmq
+import torch
+
+from time import perf_counter
+from services.connection.zmq_bind_pull import ZMQBindPull
+from services.connection.zmq_bind_push import ZMQBindPush
+from services.connection.frame_message_pb2 import InputFrame
+from services.connection.bt_packet_pb2 import BtPacket
+
+def _norm_ipc(envkey: str, default: str) -> str:
+    v = os.environ.get(envkey, default)
+    if v.startswith("ipc://"):
+        return v
+    if v.startswith("/"):
+        return "ipc://" + v
+    return v
+
+# --- knobs ---
+CONF   = float(os.getenv("MOONALT_YOLO_CONF",   "0.45"))
+IOU    = float(os.getenv("MOONALT_YOLO_IOU",    "0.55"))
+MAXDET = int(os.getenv("MOONALT_YOLO_MAXDET",   "60"))
+RETINA = os.getenv("MOONALT_YOLO_RETINA", "0").lower() not in ("0","false","no","off")
+
+IMGSZ_CAP     = int(os.getenv("MOONALT_YOLO_IMGSZ", "640"))
+EVERY_N       = max(1, int(os.getenv("MOONALT_YOLO_EVERY_N", "1")))
+SEND_RAW      = os.getenv("MOONALT_BT_SEND_RAW", "1").lower() not in ("0","false","no","off")
+HALF_DESIRED  = os.getenv("MOONALT_YOLO_HALF", "1").lower() not in ("0","false","no","off")
+CLASSES       = [0, 32]  # person, sports ball
+
+torch.backends.cudnn.benchmark = True
+try:
+    torch.set_float32_matmul_precision("high")
+except Exception:
+    pass
+
+# --- model load with safe FP16 setup ---
+HAVE_YOLO = False
+half = False
+device = "cpu"
+
+try:
+    from ultralytics import YOLO
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    model = YOLO("yolov8n-seg.pt")
+
+    # 1) Warm up ONCE in FP32 to allow Ultralytics to fuse safely
+    dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+    model.predict(source=dummy, imgsz=IMGSZ_CAP, device=device, half=False, verbose=False)
+
+    # 2) If user wants half and CUDA is available: drop predictor, set model to half,
+    #    and all subsequent predict() calls will pass half=True consistently.
+    if device != "cpu" and HALF_DESIRED:
+        try:
+            model.predictor = None  # force re-create predictor with new dtype next call
+        except Exception:
+            pass
+        if hasattr(model, "model") and hasattr(model.model, "half"):
+            model.model.half()
+        half = True
+        print("[worker] Using FP16 after FP32 fuse.")
+    else:
+        half = False
+
+    print("YOLOv8n-seg summary (fused)")
+    print(f"[worker] YOLO ready. device={device} half={half} imgsz_cap={IMGSZ_CAP} classes={CLASSES}")
+    HAVE_YOLO = True
+except Exception as e:
+    print(f"[worker] YOLO load failed -> CPU empty outputs. ({e})")
+    HAVE_YOLO = False
+
+def _infer(frame_bgr: np.ndarray):
+    """
+    Returns:
+      boxes_xyxy: list[[x1,y1,x2,y2]]
+      scores: list[float]
+      classes: list[int]
+      mask_gray: (H,W) uint8
+    """
+    h, w = frame_bgr.shape[:2]
+
+    if not HAVE_YOLO:
+        return [], [], [], np.zeros((h, w), dtype=np.uint8)
+
+    res = model.predict(
+        source=frame_bgr,
+        imgsz=IMGSZ_CAP,
+        conf=CONF,
+        iou=IOU,
+        max_det=MAXDET,
+        classes=CLASSES,
+        retina_masks=RETINA,
+        verbose=False,
+        device=device,
+        half=half,           # <- FIX: stay consistent, no mid-run switching
+    )[0]
+
+    boxes_xyxy, scores, classes = [], [], []
+    mask_gray = np.zeros((h, w), dtype=np.uint8)
+
+    if res.boxes is not None and len(res.boxes) > 0:
+        xyxy = res.boxes.xyxy.detach().to("cpu").numpy().astype(np.int32)
+        scrs = res.boxes.conf.detach().to("cpu").numpy().astype(np.float32)
+        clss = res.boxes.cls.detach().to("cpu").numpy().astype(np.int32)
+        for (x1, y1, x2, y2), s, c in zip(xyxy, scrs, clss):
+            x1 = max(0, min(int(x1), w - 1))
+            x2 = max(0, min(int(x2), w - 1))
+            y1 = max(0, min(int(y1), h - 1))
+            y2 = max(0, min(int(y2), h - 1))
+            if x2 > x1 and y2 > y1:
+                boxes_xyxy.append([x1, y1, x2, y2])
+                scores.append(float(s))
+                classes.append(int(c))
+
+    if getattr(res, "masks", None) is not None and res.masks is not None:
+        m = res.masks.data.detach().to("cpu").numpy()
+        for mi in m:
+            mi = (mi > 0.5).astype(np.uint8) * 255
+            if mi.shape[0] != h or mi.shape[1] != w:
+                mi = cv2.resize(mi, (w, h), interpolation=cv2.INTER_NEAREST)
+            mask_gray |= mi
+
+    return boxes_xyxy, scores, classes, mask_gray
+
+def run_worker():
+    in_ep  = _norm_ipc("MOONALT_IPC_IN",         "ipc:///tmp/yolo_input.sock")
+    out_ep = _norm_ipc("MOONALT_BROADTRACK_OUT", "ipc:///tmp/broadtrack_in.sock")
+
+    ctx = zmq.Context.instance()
+    pull = ZMQBindPull(ctx, in_ep)   # BIND; capture CONNECTs
+    push = ZMQBindPush(ctx, out_ep)  # BIND; viewer CONNECTs
+
+    print("[worker] READY. Waiting for InputFrame on IPC…")
+
+    last_boxes, last_scores, last_classes = [], [], []
+    last_mask = None
+    ema_fps = None
+    frame_counter = 0
+
+    try:
+        while True:
+            raw = pull.recv_bytes()
+            msg = InputFrame()
+            msg.ParseFromString(raw)
+
+            w = int(msg.width)
+            h = int(msg.height)
+            if msg.pixel_format != "BGR24":
+                continue
+
+            frame_bgr = np.frombuffer(msg.frame_data, dtype=np.uint8).reshape(h, w, 3)
+
+            do_infer = (EVERY_N <= 1) or (frame_counter % EVERY_N == 0)
+        if do_infer:
+            # High-res timer + sync to get REAL GPU time
+                t0 = perf_counter()
+                boxes_xyxy, scores, classes, mask_gray = _infer(frame_bgr)
+                if torch.cuda.is_available():
+                  torch.cuda.synchronize()  # ensure GPU work finished before timing
+                dt = max(1e-3, perf_counter() - t0)  # clamp to >=1ms to avoid huge FPS spikes
+                inst = 1.0 / dt
+                ema_fps = inst if ema_fps is None else (0.9 * ema_fps + 0.1 * inst)
+
+                last_boxes, last_scores, last_classes = boxes_xyxy, scores, classes
+                last_mask = mask_gray
+            else:
+                boxes_xyxy, scores, classes, mask_gray = last_boxes, last_scores, last_classes, last_mask
+                if mask_gray is None:
+                    mask_gray = np.zeros((h, w), dtype=np.uint8)
+
+            pkt = BtPacket()
+            pkt.schema = "moonalt.bt_packet_v1"
+            pkt.frame_id = int(msg.frame_id)
+
+            if SEND_RAW:
+                pkt.raw.schema = "moonalt.raw_v1"
+                pkt.raw.frame_id = pkt.frame_id
+                pkt.raw.width = w
+                pkt.raw.height = h
+                pkt.raw.pixel_format = "BGR24"
+                pkt.raw.frame_data = frame_bgr.tobytes()
+
+            pkt.mask.schema = "moonalt.mask_v1"
+            pkt.mask.frame_id = pkt.frame_id
+            pkt.mask.width = w
+            pkt.mask.height = h
+            pkt.mask.pixel_format = "GRAY8"
+            pkt.mask.frame_data = (mask_gray if mask_gray is not None else np.zeros((h, w), dtype=np.uint8)).tobytes()
+
+            pkt.boxes.schema = "moonalt.boxes_v1"
+            pkt.boxes.frame_id = pkt.frame_id
+            pkt.boxes.width = w
+            pkt.boxes.height = h
+            for (x1, y1, x2, y2), sc, cl in zip(boxes_xyxy or [], scores or [], classes or []):
+                b = pkt.boxes.boxes.add()
+                b.x1, b.y1, b.x2, b.y2 = int(x1), int(y1), int(x2), int(y2)
+                b.score = float(sc)
+                b.class_id = int(cl)
+
+            push.send(pkt.SerializeToString())
+
+            if ema_fps is not None and do_infer:
+                print(f"[worker] frame_id={pkt.frame_id} size=({w},{h}) "
+                      f"mask=({mask_gray.shape[0]},{mask_gray.shape[1]}) "
+                      f"boxes={len(pkt.boxes.boxes)} proc_fps={ema_fps:.1f}")
+
+            frame_counter += 1
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try: pull.close()
+        except Exception: pass
+        try: push.close()
+        except Exception: pass
+
+if __name__ == "__main__":
+    run_worker()
