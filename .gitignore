@@ -1,9 +1,0 @@
-.venv/
-__pycache__/
-*.pyc
-Videos/
-*.mp4
-*.mov
-*.avi
-*.pt
-.DS_Store
