@@ -1,5 +1,5 @@
 syntax = "proto3";
-package moonalt;
+package golex.virtualtracking;
 
 // Incoming RAW frame to YOLO worker (BGR24 unmodified)
 message InputFrame {
