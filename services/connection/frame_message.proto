@@ -1,5 +1,5 @@
 syntax = "proto3";
-package moonalt;
+package golex.virtualtracking;
 
 // Message the capture script must send to the YOLO worker
 message InputFrame {
@@ -11,3 +11,4 @@ message InputFrame {
   string pixel_format = 6;  // "BGR24"
   bytes  frame_data   = 7;  // width * height * 3 for BGR24
 }
+
