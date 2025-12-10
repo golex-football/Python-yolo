@@ -1,5 +1,5 @@
 syntax = "proto3";
-package moonalt;
+package golex.virtualtracking;
 
 message RawFrame {
   string schema       = 1;  // "moonalt.raw_v1"
