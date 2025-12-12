@@ -1,77 +1,234 @@
-# Python YOLO Worker (Connection-develop compatible)
 
-This repo contains **only** the production YOLO worker used in the live pipeline:
 
-**Capture (C++) → ZMQ/Protobuf → YOLO Worker (Python) → ZMQ/Protobuf → BroadTrack (C++)**
+Python YOLO – Connection-Based Worker
 
-It is intentionally minimal: **no viewer**, **no Python capture**, no demo scripts.
+This repository contains a minimal, production-ready YOLO worker designed to sit between Capture and BroadTrack using ZMQ + Protobuf, as defined in the Connection-develop module.
 
-## Default endpoints
-- **Input** (from Capture): `ipc:///tmp/capture`  *(Capture binds PUSH, worker connects PULL)*
-- **Output** (to BroadTrack): `ipc:///tmp/broadtrack_in.sock` *(BroadTrack binds PULL, worker connects PUSH)*
+It only includes what is required for the live pipeline and intentionally removes all viewers, test captures, and demo scripts.
 
-You can override these using env vars:
-- `MOONALT_IPC_IN`
-- `MOONALT_BROADTRACK_OUT`
 
-## Install + run
-```bash
-cd ~/Projects/Python-yolo-connection
+---
+
+🎯 Purpose
+
+Capture (C++ / Connection)
+   └── ZMQ + Protobuf (InputFrame)
+        ↓
+   YOLO Worker (this repo)
+        ↓
+   ZMQ + Protobuf (YOLO output)
+        └── BroadTrack (C++)
+
+Real-time, frame-by-frame processing
+
+One input message → one YOLO inference → one output message
+
+No buffering, no global smoothing, no offline passes
+
+CPU-first (GPU ready when drivers are available)
+
+
+
+---
+
+📁 Repository Structure
+
+Python-yolo-connection/
+├── app/
+│   └── worker.py                 # Main entry point (ONLY runtime logic)
+│
+├── services/
+│   └── connection/
+│       ├── __init__.py
+│       ├── frame_message_pb2.py  # Input protobuf (from Capture)
+│       ├── yolo_packet_pb2.py    # Output protobuf (to BroadTrack)
+│       ├── zmq_connect_pull.py   # ZMQ PULL wrapper (connect)
+│       └── zmq_connect_push.py   # ZMQ PUSH wrapper (connect)
+│
+├── proto/                        # Reference only (not used at runtime)
+│   ├── frame_message.proto
+│   └── yolo_packet.proto
+│
+├── scripts/
+│   └── run_worker.sh             # Production run script
+│
+├── requirements.txt
+├── yolov8n-seg.pt                # YOLOv8 segmentation model
+└── README.md
+
+
+---
+
+❌ What Was Removed (Intentionally)
+
+These files do not exist in this repo by design:
+
+Viewers (viewer.py, viewer_gui.py)
+
+Python capture sources (capture_from_video.py, capture_from_v4l2.py)
+
+Test / demo scripts
+
+tmux helpers, debug runners, local tools
+
+
+➡️ All capture and visualization is handled outside this repo.
+
+
+---
+
+🔌 Communication Details
+
+ZMQ Pattern
+
+Capture → YOLO
+
+Pattern: PUSH → PULL
+
+YOLO side: PULL + connect
+
+
+YOLO → BroadTrack
+
+Pattern: PUSH
+
+YOLO side: PUSH + connect
+
+
+
+Default Endpoints
+
+IN  = ipc:///tmp/capture
+OUT = ipc:///tmp/broadtrack_in.sock
+
+> IPC requires Capture, YOLO, and BroadTrack to run on the same machine.
+
+
+
+
+---
+
+📦 Input Protobuf (from Capture)
+
+Message: InputFrame
+
+Required fields:
+
+schema → must match expected schema (e.g. golex.vt.input_v1)
+
+width
+
+height
+
+pixel_format → must be BGR24
+
+frame_data → raw bytes
+
+
+Validation performed by worker:
+
+len(frame_data) == width * height * 3
+
+If this fails, the frame is dropped with a log, not crashed.
+
+
+---
+
+📤 Output Protobuf (to BroadTrack)
+
+One output message per input frame
+
+Encoded using yolo_packet_pb2
+
+Structure matches Connection-develop expectations
+
+
+> If BroadTrack parsing fails, check that yolo_packet.proto is byte-for-byte identical to the C++ side.
+
+
+
+
+---
+
+🚀 Setup & Run
+
+1) Create and activate virtual environment
+
+cd Python-yolo-connection
 
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Some distros don't provide `python` inside venv by default
+# Ensure `python` exists (scripts expect it)
 ln -sf "$(command -v python3)" .venv/bin/python
+
+2) Install dependencies
 
 pip install -U pip
 pip install --default-timeout=1000 --retries 30 -r requirements.txt
 
+3) Run the worker
+
 bash scripts/run_worker.sh
-```
 
-## Useful env vars
-```bash
-# endpoints
-export MOONALT_IPC_IN="ipc:///tmp/capture"
-export MOONALT_BROADTRACK_OUT="ipc:///tmp/broadtrack_in.sock"
+Expected log:
 
-# YOLO tuning
-export MOONALT_YOLO_IMGSZ=640
-export MOONALT_YOLO_EVERY_N=1
-export MOONALT_YOLO_CONF=0.45
-export MOONALT_YOLO_IOU=0.55
-export MOONALT_YOLO_MAXDET=60
-export MOONALT_YOLO_RETINA=0
+[worker] READY
+[worker] recv bytes: ...
+[worker] parsed frame: schema=... w=... h=... pix=BGR24 bytes=...
 
-# output/logging
-export MOONALT_BT_SEND_RAW=1
-export MOONALT_LOG_EVERY=10
-```
 
-## Notes
-- If CUDA drivers are not installed (or not working), the worker automatically falls back to **CPU**.
-- Input expects `pixel_format == "BGR24"` and checks `len(frame_data) == width*height*3`.
+---
 
-## Troubleshooting
-### Worker prints READY but receives nothing
-1) Make sure Capture is running and bound the IPC path:
-```bash
-ls -la /tmp/capture*
-```
+🧪 Debugging & Logging
 
-2) Remove stale IPC files before re-running:
-```bash
-rm -f /tmp/capture /tmp/capture.sock /tmp/broadtrack_in.sock
-```
+The worker logs every critical stage:
 
-### "Problem is parsing after recv"
-The worker logs:
-- received byte length
-- protobuf parse errors (if any)
-- pixel_format mismatch
-- frame_data size mismatch
+After recv() → confirms data arrival
 
-## Protocol
-Authoritative `.proto` files (matching Connection-develop) are in `proto/`.
-Runtime Python generated modules are in `services/connection/*_pb2.py`.
+After ParseFromString() → confirms protobuf validity
+
+Frame size validation → catches width/height mismatches
+
+Pixel format validation → avoids garbage frames
+
+
+If YOLO receives data but does nothing:
+
+The issue is parsing, not ZMQ
+
+Compare proto files and pixel format first
+
+
+
+---
+
+🧠 CPU / GPU Behavior
+
+GPU not required
+
+Automatically runs on CPU if:
+
+
+torch.cuda.is_available() == False
+
+GPU can be enabled later without code changes.
+
+
+---
+
+✅ Guarantees
+
+No hidden entry points
+
+No unused files
+
+No viewer-only logic
+
+One clear main: app/worker.py
+
+Fully aligned with Connection-develop
+
+
+
+---
