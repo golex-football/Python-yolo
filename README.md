@@ -1,16 +1,15 @@
 
+# Python YOLO – Connection-Based Worker
 
-Python YOLO – Connection-Based Worker
+This repository contains a **minimal, production-ready YOLO worker** designed to sit **between Capture and BroadTrack** using **ZMQ + Protobuf**, as defined in the **Connection-develop** module.
 
-This repository contains a minimal, production-ready YOLO worker designed to sit between Capture and BroadTrack using ZMQ + Protobuf, as defined in the Connection-develop module.
-
-It only includes what is required for the live pipeline and intentionally removes all viewers, test captures, and demo scripts.
-
+It **only** includes what is required for the live pipeline and intentionally removes all viewers, test captures, and demo scripts.
 
 ---
 
-🎯 Purpose
+## 🎯 Purpose
 
+```
 Capture (C++ / Connection)
    └── ZMQ + Protobuf (InputFrame)
         ↓
@@ -18,21 +17,18 @@ Capture (C++ / Connection)
         ↓
    ZMQ + Protobuf (YOLO output)
         └── BroadTrack (C++)
+```
 
-Real-time, frame-by-frame processing
-
-One input message → one YOLO inference → one output message
-
-No buffering, no global smoothing, no offline passes
-
-CPU-first (GPU ready when drivers are available)
-
-
+- Real-time, frame-by-frame processing
+- One input message → one YOLO inference → one output message
+- No buffering, no global smoothing, no offline passes
+- CPU-first (GPU ready when drivers are available)
 
 ---
 
-📁 Repository Structure
+## 📁 Repository Structure
 
+```
 Python-yolo-connection/
 ├── app/
 │   └── worker.py                 # Main entry point (ONLY runtime logic)
@@ -55,105 +51,77 @@ Python-yolo-connection/
 ├── requirements.txt
 ├── yolov8n-seg.pt                # YOLOv8 segmentation model
 └── README.md
-
-
----
-
-❌ What Was Removed (Intentionally)
-
-These files do not exist in this repo by design:
-
-Viewers (viewer.py, viewer_gui.py)
-
-Python capture sources (capture_from_video.py, capture_from_v4l2.py)
-
-Test / demo scripts
-
-tmux helpers, debug runners, local tools
-
-
-➡️ All capture and visualization is handled outside this repo.
-
+```
 
 ---
 
-🔌 Communication Details
+## ❌ What Was Removed (Intentionally)
 
-ZMQ Pattern
+These files **do not exist** in this repo by design:
 
-Capture → YOLO
+- Viewers (`viewer.py`, `viewer_gui.py`)
+- Python capture sources (`capture_from_video.py`, `capture_from_v4l2.py`)
+- Test / demo scripts
+- tmux helpers, debug runners, local tools
 
-Pattern: PUSH → PULL
+➡️ All capture and visualization is handled **outside** this repo.
 
-YOLO side: PULL + connect
+---
 
+## 🔌 Communication Details
 
-YOLO → BroadTrack
+### ZMQ Pattern
+- **Capture → YOLO**
+  - Pattern: `PUSH → PULL`
+  - YOLO side: **PULL + connect**
+- **YOLO → BroadTrack**
+  - Pattern: `PUSH`
+  - YOLO side: **PUSH + connect**
 
-Pattern: PUSH
-
-YOLO side: PUSH + connect
-
-
-
-Default Endpoints
-
+### Default Endpoints
+```
 IN  = ipc:///tmp/capture
 OUT = ipc:///tmp/broadtrack_in.sock
+```
 
-> IPC requires Capture, YOLO, and BroadTrack to run on the same machine.
-
-
-
+> IPC requires Capture, YOLO, and BroadTrack to run on the **same machine**.
 
 ---
 
-📦 Input Protobuf (from Capture)
+## 📦 Input Protobuf (from Capture)
 
-Message: InputFrame
+**Message:** `InputFrame`
 
 Required fields:
-
-schema → must match expected schema (e.g. golex.vt.input_v1)
-
-width
-
-height
-
-pixel_format → must be BGR24
-
-frame_data → raw bytes
-
+- `schema` → must match expected schema (e.g. `golex.vt.input_v1`)
+- `width`
+- `height`
+- `pixel_format` → **must be `BGR24`**
+- `frame_data` → raw bytes
 
 Validation performed by worker:
-
+```
 len(frame_data) == width * height * 3
+```
 
-If this fails, the frame is dropped with a log, not crashed.
-
-
----
-
-📤 Output Protobuf (to BroadTrack)
-
-One output message per input frame
-
-Encoded using yolo_packet_pb2
-
-Structure matches Connection-develop expectations
-
-
-> If BroadTrack parsing fails, check that yolo_packet.proto is byte-for-byte identical to the C++ side.
-
-
-
+If this fails, the frame is **dropped with a log**, not crashed.
 
 ---
 
-🚀 Setup & Run
+## 📤 Output Protobuf (to BroadTrack)
 
-1) Create and activate virtual environment
+- One output message per input frame
+- Encoded using `yolo_packet_pb2`
+- Structure matches **Connection-develop expectations**
 
+> If BroadTrack parsing fails, check that `yolo_packet.proto` is byte-for-byte identical to the C++ side.
+
+---
+
+## 🚀 Setup & Run
+
+### 1) Create and activate virtual environment
+```bash
 cd Python-yolo-connection
 
 python3 -m venv .venv
@@ -161,74 +129,67 @@ source .venv/bin/activate
 
 # Ensure `python` exists (scripts expect it)
 ln -sf "$(command -v python3)" .venv/bin/python
+```
 
-2) Install dependencies
-
+### 2) Install dependencies
+```bash
 pip install -U pip
 pip install --default-timeout=1000 --retries 30 -r requirements.txt
+```
 
-3) Run the worker
-
+### 3) Run the worker
+```bash
 bash scripts/run_worker.sh
+```
 
 Expected log:
-
+```text
 [worker] READY
 [worker] recv bytes: ...
 [worker] parsed frame: schema=... w=... h=... pix=BGR24 bytes=...
-
+```
 
 ---
 
-🧪 Debugging & Logging
+## 🧪 Debugging & Logging
 
-The worker logs every critical stage:
+The worker logs **every critical stage**:
 
-After recv() → confirms data arrival
-
-After ParseFromString() → confirms protobuf validity
-
-Frame size validation → catches width/height mismatches
-
-Pixel format validation → avoids garbage frames
-
+- After `recv()` → confirms data arrival
+- After `ParseFromString()` → confirms protobuf validity
+- Frame size validation → catches width/height mismatches
+- Pixel format validation → avoids garbage frames
 
 If YOLO receives data but does nothing:
-
-The issue is parsing, not ZMQ
-
-Compare proto files and pixel format first
-
-
+- The issue is **parsing**, not ZMQ
+- Compare proto files and pixel format first
 
 ---
 
-🧠 CPU / GPU Behavior
+## 🧠 CPU / GPU Behavior
 
-GPU not required
-
-Automatically runs on CPU if:
-
-
+- GPU **not required**
+- Automatically runs on CPU if:
+```python
 torch.cuda.is_available() == False
+```
 
 GPU can be enabled later without code changes.
 
+---
+
+## ✅ Guarantees
+
+- No hidden entry points
+- No unused files
+- No viewer-only logic
+- One clear `main`: `app/worker.py`
+- Fully aligned with **Connection-develop**
 
 ---
 
-✅ Guarantees
+## 📌 Notes for the Team
 
-No hidden entry points
-
-No unused files
-
-No viewer-only logic
-
-One clear main: app/worker.py
-
-Fully aligned with Connection-develop
-
-
-
----
+- **Do not add viewers or capture code here**
+- All schema or protobuf changes must be mirrored here
+- If something breaks, log immediately after `recv()`
