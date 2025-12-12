@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package golex.virtualtracking;
+
+// YOLO → BroadTrack (only one message)
+// Carries raw frame, mask frame, and boxes.
+message YoloPacket {
+  string schema    = 1;  // e.g. "golex.vt.yolo_v1"
+  int64  frame_id  = 2;
+
+  // Raw frame (same or derived from InputFrame)
+  uint32 raw_width        = 3;
+  uint32 raw_height       = 4;
+  string raw_pixel_format = 5;  // e.g. "BGR24"
+  bytes  raw_frame        = 6;  // raw_width * raw_height * channels
+
+  // Segmentation mask (can be same res or different)
+  uint32 mask_width  = 7;
+  uint32 mask_height = 8;
+  // 1-channel mask, uint8 packed; interpretation up to BroadTrack
+  bytes  mask_frame  = 9;
+
+  // Bounding boxes: [x, y, w, h, score, class_id, ...]
+  // x,y,w,h are floats (normalized or pixels – but NOT integer type).
+  repeated float boxes = 10;
+}

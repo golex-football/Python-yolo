@@ -1,0 +1,5 @@
+ultralytics
+opencv-python
+pyzmq
+protobuf==3.20.3
+numpy<2
