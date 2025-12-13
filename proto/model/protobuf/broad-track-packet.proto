@@ -1,0 +1,73 @@
+/*
+       message PastedObject {
+          /home/sina/videos/soccer_frames/000001.jpg /home/sina/videos/soccer_frames/000001.jpg = 1;
+/home/sina/videos/soccer_frames/000002.jpg /home/sina/videos/soccer_frames/000002.jpg = 2;
+/home/sina/videos/soccer_frames/000003.jpg /home/sina/videos/soccer_frames/000003.jpg = 3;
+       }
+       message /home/sina/videos/soccer_frames/000001.jpg {
+          Cp cp = 1;
+uint32 score = 2;
+uint32 time = 3;
+bool reinit = 4;
+       }
+        message Cp {
+           uint32 sensorResolutionWidthPixels = 1;
+ uint32 sensorResolutionHeightPixels = 2;
+ uint32 horizontalFieldOfViewDegrees = 3;
+ uint32 panDegrees = 4;
+ uint32 tiltDegrees = 5;
+ uint32 rollDegrees = 6;
+ uint32 positionXMeters = 7;
+ uint32 positionYMeters = 8;
+ uint32 positionZMeters = 9;
+repeated string normalizedRadialDistortionCoefficients = 10;
+        }
+       message /home/sina/videos/soccer_frames/000002.jpg {
+          Cp1 cp = 1;
+uint32 score = 2;
+uint32 time = 3;
+bool reinit = 4;
+       }
+        message Cp1 {
+           uint32 sensorResolutionWidthPixels = 1;
+ uint32 sensorResolutionHeightPixels = 2;
+ uint32 horizontalFieldOfViewDegrees = 3;
+ uint32 panDegrees = 4;
+ uint32 tiltDegrees = 5;
+ uint32 rollDegrees = 6;
+ uint32 positionXMeters = 7;
+ uint32 positionYMeters = 8;
+ uint32 positionZMeters = 9;
+repeated string normalizedRadialDistortionCoefficients = 10;
+        }
+       message /home/sina/videos/soccer_frames/000003.jpg {
+          Cp2 cp = 1;
+uint32 score = 2;
+uint32 time = 3;
+bool reinit = 4;
+       }
+        message Cp2 {
+           uint32 sensorResolutionWidthPixels = 1;
+ uint32 sensorResolutionHeightPixels = 2;
+ uint32 horizontalFieldOfViewDegrees = 3;
+ uint32 panDegrees = 4;
+ uint32 tiltDegrees = 5;
+ uint32 rollDegrees = 6;
+ uint32 positionXMeters = 7;
+ uint32 positionYMeters = 8;
+ uint32 positionZMeters = 9;
+repeated string normalizedRadialDistortionCoefficients = 10;
+        }
+*/
+syntax = "proto3";
+
+package golex.virtualtracking.model;
+
+import "model/protobuf/raw-frame.proto";
+import "model/protobuf/mask-frame.proto";
+
+message BroadTrackPacket {
+  uint64 frame_id = 1;
+  RawFrame raw_frame = 2;
+  MaskFrame mask_frame = 3;
+}

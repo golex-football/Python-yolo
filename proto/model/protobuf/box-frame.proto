@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package golex.virtualtracking.model;
+
+import "model/protobuf/box.proto";
+
+message BoxFrame {
+  uint32 width = 1;
+  uint32 height = 2;
+  repeated Box boxes = 3;
+}
