@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-package golex.virtualtracking.model;
-
-enum PixelFormats{
-  PF_GRAY8 = 0;
-  PF_BGR24 = 1;
-}
