@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package golex.virtualtracking.model;
+
+import "model/protobuf/common.proto";
+
+message MaskFrame {
+  uint64 timestamp = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  PixelFormats pixel_format = 4;  // "GRAY8"
+  bytes frame_data = 5;  // width * height
+}

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package golex.virtualtracking.model;
+
+import "model/protobuf/raw-frame.proto";
+
+message CapturePacket {
+  uint64 frame_id = 1;
+  RawFrame raw_frame = 2;
+}
