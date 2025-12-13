@@ -2,7 +2,7 @@
 
 This repo is the YOLO worker for the **Capture → YOLO → BroadTrack** pipeline.
 
-## What was applied (Nazari notes)
+## What was applied 
 - Added a log **immediately after `recv()`** so we confirm data arrival.
 - Added a log **right after protobuf parse** to confirm parse correctness.
 - Added strict validation (schema, pixel_format, byte-length) and safe drop with logs (no crash).
