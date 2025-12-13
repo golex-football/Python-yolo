@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package golex.virtualtracking.model;
+
+import "model/protobuf/raw-frame.proto";
+import "model/protobuf/mask-frame.proto";
+import "model/protobuf/box-frame.proto";
+
+message BroadTrackPacket {
+  uint64 frame_id = 1;
+  RawFrame raw_frame = 3;
+  MaskFrame mask_frame = 4;
+  BoxFrame box_frame = 5;
+}
